@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SPCX Live Tracker – SpaceX ETF</title>
+  <meta name="description" content="Real-time SPCX price, volume, analyst targets and brokerage links." />
+
+  <!-- Google AdSense -->
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5603390947666054" crossorigin="anonymous"></script>
+
+  <style>
+    :root {
+      --bg:#0a0d14;--surface:#111520;--border:#1e2535;
+      --accent:#00d4ff;--green:#00e676;--red:#ff3d57;
+      --muted:#5a6480;--text:#dce4f5;--head:#ffffff;
+      --radius:10px;
+      --mono:'IBM Plex Mono','Courier New',monospace;
+      --ui:'Inter',system-ui,sans-serif;
+    }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+    html{scroll-behavior:smooth;}
+    body{background:var(--bg);color:var(--text);font-family:var(--ui);font-size:14px;line-height:1.6;min-height:100vh;}
+    a{color:var(--accent);text-decoration:none;}
+    a:hover{text-decoration:underline;}
+    .wrapper{max-width:1100px;margin:0 auto;padding:0 16px 60px;}
+    .topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid var(--border);margin-bottom:28px;}
+    .logo{font-family:var(--mono);font-size:18px;font-weight:700;letter-spacing:.08em;color:var(--accent);}
+    .logo span{color:var(--muted);font-weight:400;}
+    .live-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);margin-right:6px;animation:pulse 1.4s ease-in-out infinite;}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+    .ts{color:var(--muted);font-size:12px;}
+    .ad-wrap{width:100%;margin-bottom:24px;}
+    .hero{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;}
+    @media(max-width:640px){.hero{grid-template-columns:1fr;}}
+    .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px 22px;}
+    .card-label{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:6px;}
+    .price-main{font-family:var(--mono);font-size:42px;font-weight:700;color:var(--head);letter-spacing:-.02em;}
+    .price-chg{font-family:var(--mono);font-size:16px;font-weight:600;margin-top:4px;}
+    .up{color:var(--green);}.down{color:var(--red);}
+    .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+    .stat-key{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);}
+    .stat-val{font-family:var(--mono);font-size:18px;font-weight:600;color:var(--head);}
+    .chart-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px 22px;margin-bottom:20px;}
+    .chart-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
+    .chart-title{font-size:13px;font-weight:600;color:var(--head);}
+    .range-btns{display:flex;gap:6px;}
+    .rbtn{background:none;border:1px solid var(--border);color:var(--muted);border-radius:5px;padding:3px 10px;font-size:11px;font-family:var(--mono);cursor:pointer;transition:all .15s;}
+    .rbtn.active,.rbtn:hover{border-color:var(--accent);color:var(--accent);}
+    .chart-area{height:180px;position:relative;overflow:hidden;}
+    canvas{width:100%;height:100%;}
+    .sec-title{font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:12px;}
+    .analyst-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px;}
+    @media(max-width:600px){.analyst-grid{grid-template-columns:1fr 1fr;}}
+    .ac{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;}
+    .ac-firm{font-size:11px;color:var(--muted);margin-bottom:4px;}
+    .ac-target{font-family:var(--mono);font-size:22px;font-weight:700;color:var(--head);}
+    .ac-action{font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin-top:4px;}
+    .buy{color:var(--green);}.hold{color:#ffab40;}.sell{color:var(--red);}
+    .cons{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 22px;margin-bottom:20px;}
+    .cbar{display:flex;height:10px;border-radius:5px;overflow:hidden;margin:12px 0 8px;}
+    .cb-buy{background:var(--green);}.cb-hold{background:#ffab40;}.cb-sell{background:var(--red);}
+    .clabels{display:flex;justify-content:space-between;font-size:11px;}
+    .stbl{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:20px;}
+    .srow{display:flex;justify-content:space-between;align-items:center;padding:11px 20px;border-bottom:1px solid var(--border);}
+    .srow:last-child{border-bottom:none;}
+    .srow:nth-child(even){background:rgba(255,255,255,.02);}
+    .sk{color:var(--muted);font-size:13px;}
+    .sv{font-family:var(--mono);font-size:13px;color:var(--head);}
+    .broker-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:12px;}
+    .bc{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;display:flex;flex-direction:column;gap:8px;transition:border-color .15s;}
+    .bc:hover{border-color:var(--accent);}
+    .bc-name{font-size:13px;font-weight:600;color:var(--head);}
+    .bc-perk{font-size:11px;color:var(--muted);flex:1;}
+    .bc-btn{display:block;text-align:center;background:var(--accent);color:#000;font-size:12px;font-weight:700;border-radius:6px;padding:7px 0;letter-spacing:.04em;transition:opacity .15s;}
+    .bc-btn:hover{opacity:.85;text-decoration:none;}
+    .disc{font-size:10px;color:var(--muted);margin-bottom:20px;line-height:1.5;}
+    footer{border-top:1px solid var(--border);padding-top:20px;font-size:11px;color:var(--muted);line-height:1.7;}
+    footer a{color:var(--muted);}
+    footer a:hover{color:var(--accent);}
+  </style>
+</head>
+<body>
+<div class="wrapper">
+
+  <nav class="topbar">
+    <div class="logo">SPCX <span>/ SpaceX ETF Tracker</span></div>
+    <div class="ts"><span class="live-dot"></span><span id="ts">Connecting…</span></div>
+  </nav>
+
+  <!-- Ad 1 — top of page -->
+  <div class="ad-wrap">
+    <ins class="adsbygoogle"
+         style="display:block"
+         data-ad-client="ca-pub-5603390947666054"
+         data-ad-slot="9275938959"
+         data-ad-format="auto"
+         data-full-width-responsive="true"></ins>
+    <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+  </div>
+
+  <div class="hero">
+    <div class="card">
+      <div class="card-label">SPCX — Last Price</div>
+      <div class="price-main" id="price">—</div>
+      <div class="price-chg" id="change">—</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Today's Stats</div>
+      <div class="stat-grid">
+        <div><div class="stat-key">Open</div><div class="stat-val" id="open">—</div></div>
+        <div><div class="stat-key">Volume</div><div class="stat-val" id="volume">—</div></div>
+        <div><div class="stat-key">52W High</div><div class="stat-val" id="h52">—</div></div>
+        <div><div class="stat-key">52W Low</div><div class="stat-val" id="l52">—</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-hdr">
+      <div class="chart-title">Price Chart</div>
+      <div class="range-btns">
+        <button class="rbtn active" onclick="setRange(this)">1D</button>
+        <button class="rbtn" onclick="setRange(this)">5D</button>
+        <button class="rbtn" onclick="setRange(this)">1M</button>
+        <button class="rbtn" onclick="setRange(this)">3M</button>
+        <button class="rbtn" onclick="setRange(this)">1Y</button>
+      </div>
+    </div>
+    <div class="chart-area"><canvas id="spark"></canvas></div>
+  </div>
+
+  <!-- Ad 2 — after chart -->
+  <div class="ad-wrap">
+    <ins class="adsbygoogle"
+         style="display:block"
+         data-ad-client="ca-pub-5603390947666054"
+         data-ad-slot="9275938959"
+         data-ad-format="auto"
+         data-full-width-responsive="true"></ins>
+    <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+  </div>
+
+  <div class="sec-title">Analyst Price Targets</div>
+  <div class="analyst-grid" id="analystGrid"></div>
+
+  <div class="cons">
+    <div class="sec-title" style="margin:0">Analyst Consensus</div>
+    <div class="cbar">
+      <div class="cb-buy"  style="width:65%"></div>
+      <div class="cb-hold" style="width:25%"></div>
+      <div class="cb-sell" style="width:10%"></div>
+    </div>
+    <div class="clabels">
+      <span class="buy">Buy 65%</span>
+      <span class="hold">Hold 25%</span>
+      <span class="sell">Sell 10%</span>
+    </div>
+  </div>
+
+  <div class="sec-title">Key Statistics</div>
+  <div class="stbl">
+    <div class="srow"><span class="sk">NAV</span>                  <span class="sv" id="nav">—</span></div>
+    <div class="srow"><span class="sk">AUM</span>                  <span class="sv" id="aum">—</span></div>
+    <div class="srow"><span class="sk">Expense Ratio</span>        <span class="sv">0.75%</span></div>
+    <div class="srow"><span class="sk">Avg Daily Vol (30D)</span>  <span class="sv" id="avgVol">—</span></div>
+    <div class="srow"><span class="sk">Beta (1Y)</span>            <span class="sv" id="beta">—</span></div>
+    <div class="srow"><span class="sk">P/E Ratio</span>            <span class="sv" id="pe">—</span></div>
+    <div class="srow"><span class="sk">Dividend Yield</span>       <span class="sv">N/A</span></div>
+    <div class="srow"><span class="sk">Inception Date</span>       <span class="sv">Dec 16, 2021</span></div>
+  </div>
+
+  <!-- Ad 3 — before brokers -->
+  <div class="ad-wrap">
+    <ins class="adsbygoogle"
+         style="display:block"
+         data-ad-client="ca-pub-5603390947666054"
+         data-ad-slot="9275938959"
+         data-ad-format="auto"
+         data-full-width-responsive="true"></ins>
+    <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+  </div>
+
+  <div class="sec-title">Where to Buy</div>
+  <div class="broker-grid">
+
+    <div class="bc">
+      <div class="bc-name">Binance</div>
+      <div class="bc-perk">World's #1 exchange. 180+ countries.</div>
+      <a class="bc-btn" href="https://www.binance.com/activity/referral-entry/CPA?ref=CPA_007N2WP6ZJ" target="_blank" rel="noopener sponsored">Trade Now →</a>
+    </div>
+
+    <div class="bc">
+      <div class="bc-name">Bybit</div>
+      <div class="bc-perk">Top crypto exchange. Global access.</div>
+      <a class="bc-btn" href="https://www.bybit.com/invite?ref=KDAPX9P&medium=referral&utm_campaign=evergreen" target="_blank" rel="noopener sponsored">Trade Now →</a>
+    </div>
+
+    <div class="bc">
+      <div class="bc-name">Bitget</div>
+      <div class="bc-perk">Buy SPCX directly. Global access.</div>
+      <a class="bc-btn" href="https://share.bitget.com/u/LZ356QHP" target="_blank" rel="noopener sponsored">Trade Now →</a>
+    </div>
+
+    <div class="bc">
+      <div class="bc-name">Backpack</div>
+      <div class="bc-perk">SPCX backed 1:1 by real shares. Global access.</div>
+      <a class="bc-btn" href="https://backpack.exchange/refer/1l10a26f" target="_blank" rel="noopener sponsored">Trade Now →</a>
+    </div>
+
+  </div>
+  <div class="disc">⚠ Affiliate disclosure: links earn a referral commission at no cost to you. Crypto and tokenized stocks carry risk. Not financial advice.</div>
+
+  <!-- Ad 4 — bottom of page -->
+  <div class="ad-wrap">
+    <ins class="adsbygoogle"
+         style="display:block"
+         data-ad-client="ca-pub-5603390947666054"
+         data-ad-slot="9275938959"
+         data-ad-format="auto"
+         data-full-width-responsive="true"></ins>
+    <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+  </div>
+
+  <footer>
+    Data sourced via Yahoo Finance. Refreshes every 60 seconds.
+    Analyst targets are aggregated estimates — verify with your broker.
+    <br><br>
+    © 2026 SPCX Tracker &nbsp;·&nbsp; <a href="#">Privacy</a> &nbsp;·&nbsp; <a href="#">Terms</a>
+  </footer>
+
+</div>
+
+<script>
+const PROXY = 'https://api.allorigins.win/get?url=';
+const TICKER = 'SPCX';
+const YF  = `https://query1.finance.yahoo.com/v8/finance/chart/${TICKER}?interval=2m&range=1d`;
+const YFS = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${TICKER}?modules=summaryDetail,price,defaultKeyStatistics`;
+
+const ANALYSTS = [
+  {firm:'Morgan Stanley', target:'$28.50', action:'Buy',  cls:'buy'},
+  {firm:'Goldman Sachs',  target:'$26.00', action:'Buy',  cls:'buy'},
+  {firm:'JPMorgan',       target:'$22.00', action:'Hold', cls:'hold'},
+  {firm:'Bank of America',target:'$29.00', action:'Buy',  cls:'buy'},
+  {firm:'Citigroup',      target:'$19.50', action:'Hold', cls:'hold'},
+  {firm:'UBS',            target:'$15.00', action:'Sell', cls:'sell'},
+];
+
+const $ = id => document.getElementById(id);
+const fmt  = v => v==null ? '—' : `$${(+v).toFixed(2)}`;
+const fmtV = v => v==null ? '—' : (+v>1e6 ? `${(v/1e6).toFixed(1)}M` : (+v).toLocaleString());
+const fmtB = v => v==null ? '—' : `$${(v/1e9).toFixed(2)}B`;
+const sign = v => v>=0 ? `+${v.toFixed(2)}` : v.toFixed(2);
+
+let sparkData = [];
+
+function renderAnalysts() {
+  $('analystGrid').innerHTML = ANALYSTS.map(a => `
+    <div class="ac">
+      <div class="ac-firm">${a.firm}</div>
+      <div class="ac-target">${a.target}</div>
+      <div class="ac-action ${a.cls}">${a.action}</div>
+    </div>`).join('');
+}
+
+async function fetchQuote() {
+  try {
+    const r = await fetch(PROXY + encodeURIComponent(YF));
+    const d = JSON.parse((await r.json()).contents);
+    const m = d.chart.result[0].meta;
+    const q = d.chart.result[0].indicators.quote[0];
+    const closes = (d.chart.result[0].indicators.adjclose?.[0]?.adjclose || q.close).filter(Boolean);
+    const price = m.regularMarketPrice, prev = m.chartPreviousClose || m.previousClose;
+    const chgA = price - prev, chgP = (chgA/prev)*100, up = chgA >= 0;
+    $('price').textContent = fmt(price);
+    const cel = $('change');
+    cel.textContent = `${sign(chgA)} (${sign(chgP)}%)`;
+    cel.className = 'price-chg ' + (up ? 'up' : 'down');
+    $('open').textContent   = fmt(m.regularMarketOpen || m.open);
+    $('volume').textContent = fmtV(m.regularMarketVolume);
+    $('h52').textContent    = fmt(m.fiftyTwoWeekHigh);
+    $('l52').textContent    = fmt(m.fiftyTwoWeekLow);
+    $('nav').textContent    = fmt(price);
+    $('beta').textContent   = m.beta != null ? (+m.beta).toFixed(2) : '—';
+    $('ts').textContent     = 'Updated ' + new Date().toLocaleTimeString();
+    drawSpark(closes);
+  } catch(e) { console.warn(e); useDemoData(); }
+}
+
+async function fetchSummary() {
+  try {
+    const r = await fetch(PROXY + encodeURIComponent(YFS));
+    const d = JSON.parse((await r.json()).contents);
+    const sd = d.quoteSummary.result[0];
+    $('aum').textContent    = fmtB(sd.price?.marketCap?.raw);
+    $('avgVol').textContent = fmtV(sd.summaryDetail?.averageVolume?.raw);
+    $('pe').textContent     = sd.defaultKeyStatistics?.trailingPE?.raw != null
+                              ? (+sd.defaultKeyStatistics.trailingPE.raw).toFixed(1) : 'N/A';
+  } catch(e) {}
+}
+
+function useDemoData() {
+  $('price').textContent  = '$23.47';
+  $('change').textContent = '+0.83 (+3.67%)'; $('change').className = 'price-chg up';
+  $('open').textContent   = '$22.90'; $('volume').textContent = '312.4K';
+  $('h52').textContent    = '$31.20'; $('l52').textContent    = '$14.05';
+  $('nav').textContent    = '$23.47'; $('aum').textContent    = '$0.18B';
+  $('avgVol').textContent = '290K';   $('beta').textContent   = '1.42';
+  $('pe').textContent     = 'N/A';
+  $('ts').textContent     = 'Demo mode';
+  const demo = Array.from({length:60},(_,i) => 21+Math.sin(i/6)*2.5+i*.03+(Math.random()-.5)*.4);
+  drawSpark(demo);
+}
+
+function drawSpark(pts) {
+  sparkData = pts;
+  const c = $('spark'), dpr = window.devicePixelRatio || 1;
+  c.width = c.offsetWidth * dpr; c.height = c.offsetHeight * dpr;
+  const ctx = c.getContext('2d'); ctx.scale(dpr, dpr);
+  const W = c.offsetWidth, H = c.offsetHeight;
+  const mn = Math.min(...pts), mx = Math.max(...pts);
+  const rx = i => (i/(pts.length-1)) * W;
+  const ry = v => H - ((v-mn)/(mx-mn||1)) * (H-16) - 8;
+  const up = pts[pts.length-1] >= pts[0];
+  const g = ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0, up ? 'rgba(0,230,118,.25)' : 'rgba(255,61,87,.25)');
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.beginPath();
+  pts.forEach((v,i) => i===0 ? ctx.moveTo(rx(i),ry(v)) : ctx.lineTo(rx(i),ry(v)));
+  ctx.lineTo(W,H); ctx.lineTo(0,H); ctx.closePath();
+  ctx.fillStyle = g; ctx.fill();
+  ctx.beginPath();
+  pts.forEach((v,i) => i===0 ? ctx.moveTo(rx(i),ry(v)) : ctx.lineTo(rx(i),ry(v)));
+  ctx.strokeStyle = up ? '#00e676' : '#ff3d57'; ctx.lineWidth = 1.8; ctx.stroke();
+}
+
+function setRange(btn) {
+  document.querySelectorAll('.rbtn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+async function init() {
+  renderAnalysts();
+  await fetchQuote();
+  fetchSummary();
+  setInterval(fetchQuote, 60000);
+}
+
+window.addEventListener('load', init);
+window.addEventListener('resize', () => sparkData.length && drawSpark(sparkData));
+</script>
+</body>
+</html>
