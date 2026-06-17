@@ -162,6 +162,10 @@
   <div class="stbl">
     <div class="srow"><span class="sk">NAV</span>                  <span class="sv" id="nav">—</span></div>
     <div class="srow"><span class="sk">AUM</span>                  <span class="sv" id="aum">—</span></div>
+    <div class="srow"><span class="sk">Market Cap</span>           <span class="sv" id="mktCap">—</span></div>
+    <div class="srow"><span class="sk">Day Range</span>            <span class="sv" id="dayRange">—</span></div>
+    <div class="srow"><span class="sk">Bid / Ask</span>             <span class="sv" id="bidAsk">—</span></div>
+    <div class="srow"><span class="sk">Shares Outstanding</span>   <span class="sv" id="shares">—</span></div>
     <div class="srow"><span class="sk">Expense Ratio</span>        <span class="sv">0.75%</span></div>
     <div class="srow"><span class="sk">Avg Daily Vol (30D)</span>  <span class="sv" id="avgVol">—</span></div>
     <div class="srow"><span class="sk">Beta (1Y)</span>            <span class="sv" id="beta">—</span></div>
@@ -232,7 +236,12 @@
 </div>
 
 <script>
-const PROXY = 'https://api.allorigins.win/get?url=';
+const PROXIES = [
+  'https://api.allorigins.win/get?url=',
+  'https://corsproxy.io/?url=',
+  'https://api.codetabs.com/v1/proxy?quest=',
+  'https://thingproxy.freeboard.io/fetch/'
+];
 const TICKER = 'SPCX';
 const YF  = `https://query1.finance.yahoo.com/v8/finance/chart/${TICKER}?interval=2m&range=1d`;
 const YFS = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${TICKER}?modules=summaryDetail,price,defaultKeyStatistics`;
@@ -254,6 +263,32 @@ const sign = v => v>=0 ? `+${v.toFixed(2)}` : v.toFixed(2);
 
 let sparkData = [];
 
+// fetch with a hard timeout so a hanging proxy can never freeze the page
+function fetchTimeout(url, ms = 8000) {
+  const ctrl = new AbortController();
+  const id = setTimeout(() => ctrl.abort(), ms);
+  return fetch(url, { signal: ctrl.signal }).finally(() => clearTimeout(id));
+}
+
+// try each proxy in order until one works
+async function fetchViaProxy(targetUrl) {
+  let lastErr;
+  for (const p of PROXIES) {
+    try {
+      const r = await fetchTimeout(p + encodeURIComponent(targetUrl));
+      const text = await r.text();
+      // allorigins wraps the real payload inside { contents: "..." }
+      // other proxies return the raw JSON directly
+      try {
+        const wrapped = JSON.parse(text);
+        if (wrapped.contents) return JSON.parse(wrapped.contents);
+        return wrapped;
+      } catch { continue; }
+    } catch (e) { lastErr = e; }
+  }
+  throw lastErr;
+}
+
 function renderAnalysts() {
   $('analystGrid').innerHTML = ANALYSTS.map(a => `
     <div class="ac">
@@ -265,8 +300,7 @@ function renderAnalysts() {
 
 async function fetchQuote() {
   try {
-    const r = await fetch(PROXY + encodeURIComponent(YF));
-    const d = JSON.parse((await r.json()).contents);
+    const d = await fetchViaProxy(YF);
     const m = d.chart.result[0].meta;
     const q = d.chart.result[0].indicators.quote[0];
     const closes = (d.chart.result[0].indicators.adjclose?.[0]?.adjclose || q.close).filter(Boolean);
@@ -282,6 +316,9 @@ async function fetchQuote() {
     $('l52').textContent    = fmt(m.fiftyTwoWeekLow);
     $('nav').textContent    = fmt(price);
     $('beta').textContent   = m.beta != null ? (+m.beta).toFixed(2) : '—';
+    $('dayRange').textContent = (m.regularMarketDayLow != null && m.regularMarketDayHigh != null)
+                                 ? `${fmt(m.regularMarketDayLow)} – ${fmt(m.regularMarketDayHigh)}` : '—';
+    $('bidAsk').textContent   = (m.bid != null && m.ask != null) ? `${fmt(m.bid)} / ${fmt(m.ask)}` : '—';
     $('ts').textContent     = 'Updated ' + new Date().toLocaleTimeString();
     drawSpark(closes);
   } catch(e) { console.warn(e); useDemoData(); }
@@ -289,10 +326,12 @@ async function fetchQuote() {
 
 async function fetchSummary() {
   try {
-    const r = await fetch(PROXY + encodeURIComponent(YFS));
-    const d = JSON.parse((await r.json()).contents);
+    const d = await fetchViaProxy(YFS);
     const sd = d.quoteSummary.result[0];
     $('aum').textContent    = fmtB(sd.price?.marketCap?.raw);
+    $('mktCap').textContent = fmtB(sd.price?.marketCap?.raw);
+    $('shares').textContent = sd.defaultKeyStatistics?.sharesOutstanding?.raw != null
+                               ? fmtV(sd.defaultKeyStatistics.sharesOutstanding.raw) : '—';
     $('avgVol').textContent = fmtV(sd.summaryDetail?.averageVolume?.raw);
     $('pe').textContent     = sd.defaultKeyStatistics?.trailingPE?.raw != null
                               ? (+sd.defaultKeyStatistics.trailingPE.raw).toFixed(1) : 'N/A';
@@ -305,6 +344,8 @@ function useDemoData() {
   $('open').textContent   = '$22.90'; $('volume').textContent = '312.4K';
   $('h52').textContent    = '$31.20'; $('l52').textContent    = '$14.05';
   $('nav').textContent    = '$23.47'; $('aum').textContent    = '$0.18B';
+  $('mktCap').textContent = '$0.18B'; $('dayRange').textContent = '$22.80 – $23.90';
+  $('bidAsk').textContent = '$23.45 / $23.49'; $('shares').textContent = '7.7M';
   $('avgVol').textContent = '290K';   $('beta').textContent   = '1.42';
   $('pe').textContent     = 'N/A';
   $('ts').textContent     = 'Demo mode';
@@ -341,7 +382,12 @@ function setRange(btn) {
 
 async function init() {
   renderAnalysts();
+  // safety net: if nothing has loaded within 10s, force demo data so the page is never stuck
+  const safety = setTimeout(() => {
+    if ($('ts').textContent === 'Connecting…') useDemoData();
+  }, 10000);
   await fetchQuote();
+  clearTimeout(safety);
   fetchSummary();
   setInterval(fetchQuote, 60000);
 }
