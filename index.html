@@ -78,6 +78,25 @@
     footer{border-top:1px solid var(--border);padding-top:20px;font-size:11px;color:var(--muted);line-height:1.7;}
     footer a{color:var(--muted);}
     footer a:hover{color:var(--accent);}
+
+    /* volume bar */
+    .vol-bar-track{width:100%;height:14px;background:#1a2030;border-radius:7px;overflow:hidden;margin:14px 0 10px;}
+    .vol-bar-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--green));border-radius:7px;width:0%;transition:width .6s ease;}
+    .vol-bar-labels{display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--muted);}
+    .vol-bar-labels strong{color:var(--head);font-family:var(--mono);font-weight:600;}
+    .vol-pct{font-family:var(--mono);font-weight:700;color:var(--accent);font-size:13px;}
+
+    /* countdown */
+    .countdown{font-family:var(--mono);font-size:26px;font-weight:700;color:var(--head);}
+    .countdown-sm{font-family:var(--mono);font-size:16px;font-weight:600;color:var(--accent);}
+
+    /* news */
+    .news-list{margin-bottom:20px;display:flex;flex-direction:column;gap:10px;}
+    .news-item{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;display:block;transition:border-color .15s;}
+    .news-item:hover{border-color:var(--accent);text-decoration:none;}
+    .news-title{color:var(--head);font-size:13px;font-weight:600;line-height:1.4;margin-bottom:4px;}
+    .news-meta{color:var(--muted);font-size:11px;}
+    .news-loading{color:var(--muted);font-size:12px;padding:20px;text-align:center;}
   </style>
 </head>
 <body>
@@ -141,21 +160,31 @@
     <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
   </div>
 
-  <div class="sec-title">Analyst Price Targets</div>
-  <div class="analyst-grid" id="analystGrid"></div>
+  <!-- Volume vs Average + Countdown -->
+  <div class="hero" style="margin-bottom:20px;">
+    <div class="card">
+      <div class="card-label">Volume vs. 30-Day Average</div>
+      <div class="vol-bar-track">
+        <div class="vol-bar-fill" id="volBarFill"></div>
+      </div>
+      <div class="vol-bar-labels">
+        <span>Today: <strong id="volToday">—</strong></span>
+        <span id="volPct" class="vol-pct">—</span>
+        <span>Avg: <strong id="volAvg">—</strong></span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-label">Time Since IPO Listing</div>
+      <div class="countdown" id="countdown">—</div>
+      <div class="card-label" style="margin-top:14px;">Next Earnings (est.)</div>
+      <div class="countdown-sm" id="earningsCountdown">—</div>
+    </div>
+  </div>
 
-  <div class="cons">
-    <div class="sec-title" style="margin:0">Analyst Consensus</div>
-    <div class="cbar">
-      <div class="cb-buy"  style="width:65%"></div>
-      <div class="cb-hold" style="width:25%"></div>
-      <div class="cb-sell" style="width:10%"></div>
-    </div>
-    <div class="clabels">
-      <span class="buy">Buy 65%</span>
-      <span class="hold">Hold 25%</span>
-      <span class="sell">Sell 10%</span>
-    </div>
+  <!-- News Feed -->
+  <div class="sec-title">Latest SpaceX / SPCX News</div>
+  <div class="news-list" id="newsList">
+    <div class="news-loading">Loading news…</div>
   </div>
 
   <div class="sec-title">Key Statistics</div>
@@ -246,15 +275,6 @@ const TICKER = 'SPCX';
 const YF  = `https://query1.finance.yahoo.com/v8/finance/chart/${TICKER}?interval=2m&range=1d`;
 const YFS = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${TICKER}?modules=summaryDetail,price,defaultKeyStatistics`;
 
-const ANALYSTS = [
-  {firm:'Morgan Stanley', target:'$28.50', action:'Buy',  cls:'buy'},
-  {firm:'Goldman Sachs',  target:'$26.00', action:'Buy',  cls:'buy'},
-  {firm:'JPMorgan',       target:'$22.00', action:'Hold', cls:'hold'},
-  {firm:'Bank of America',target:'$29.00', action:'Buy',  cls:'buy'},
-  {firm:'Citigroup',      target:'$19.50', action:'Hold', cls:'hold'},
-  {firm:'UBS',            target:'$15.00', action:'Sell', cls:'sell'},
-];
-
 const $ = id => document.getElementById(id);
 const fmt  = v => v==null ? '—' : `$${(+v).toFixed(2)}`;
 const fmtV = v => v==null ? '—' : (+v>1e6 ? `${(v/1e6).toFixed(1)}M` : (+v).toLocaleString());
@@ -289,15 +309,6 @@ async function fetchViaProxy(targetUrl) {
   throw lastErr;
 }
 
-function renderAnalysts() {
-  $('analystGrid').innerHTML = ANALYSTS.map(a => `
-    <div class="ac">
-      <div class="ac-firm">${a.firm}</div>
-      <div class="ac-target">${a.target}</div>
-      <div class="ac-action ${a.cls}">${a.action}</div>
-    </div>`).join('');
-}
-
 async function fetchQuote() {
   try {
     const d = await fetchViaProxy(YF);
@@ -328,14 +339,52 @@ async function fetchSummary() {
   try {
     const d = await fetchViaProxy(YFS);
     const sd = d.quoteSummary.result[0];
+    const avgVolRaw = sd.summaryDetail?.averageVolume?.raw;
     $('aum').textContent    = fmtB(sd.price?.marketCap?.raw);
     $('mktCap').textContent = fmtB(sd.price?.marketCap?.raw);
     $('shares').textContent = sd.defaultKeyStatistics?.sharesOutstanding?.raw != null
                                ? fmtV(sd.defaultKeyStatistics.sharesOutstanding.raw) : '—';
-    $('avgVol').textContent = fmtV(sd.summaryDetail?.averageVolume?.raw);
+    $('avgVol').textContent = fmtV(avgVolRaw);
     $('pe').textContent     = sd.defaultKeyStatistics?.trailingPE?.raw != null
                               ? (+sd.defaultKeyStatistics.trailingPE.raw).toFixed(1) : 'N/A';
+    updateVolumeBar(avgVolRaw);
   } catch(e) {}
+}
+
+/* ── Volume vs average bar ── */
+function updateVolumeBar(avgVolRaw) {
+  const todayText = $('volume').textContent;
+  if (!avgVolRaw || todayText === '—') return;
+  // parse "312.4K" / "1.2M" style back to a number
+  const parseShort = s => {
+    const n = parseFloat(s);
+    if (s.includes('M')) return n * 1e6;
+    if (s.includes('K')) return n * 1e3;
+    return n;
+  };
+  const today = parseShort(todayText);
+  const pct = Math.min((today / avgVolRaw) * 100, 200); // cap visual at 200%
+  $('volBarFill').style.width = Math.min(pct, 100) + '%';
+  $('volToday').textContent = todayText;
+  $('volAvg').textContent   = fmtV(avgVolRaw);
+  $('volPct').textContent   = pct.toFixed(0) + '% of avg';
+  $('volPct').style.color   = pct >= 100 ? 'var(--green)' : 'var(--accent)';
+}
+
+/* ── Countdown: time since IPO + estimated next earnings ── */
+function updateCountdowns() {
+  const ipoDate = new Date('2021-12-16T00:00:00Z');
+  const now = new Date();
+  const diffDays = Math.floor((now - ipoDate) / 86400000);
+  const years = Math.floor(diffDays / 365);
+  const remDays = diffDays % 365;
+  $('countdown').textContent = `${years}y ${remDays}d`;
+
+  // ETFs don't report earnings directly; estimate next quarterly review (every ~3 months from IPO)
+  let next = new Date(ipoDate);
+  while (next <= now) next.setMonth(next.getMonth() + 3);
+  const daysLeft = Math.ceil((next - now) / 86400000);
+  $('earningsCountdown').textContent = `${daysLeft} days`;
 }
 
 function useDemoData() {
@@ -349,6 +398,7 @@ function useDemoData() {
   $('avgVol').textContent = '290K';   $('beta').textContent   = '1.42';
   $('pe').textContent     = 'N/A';
   $('ts').textContent     = 'Demo mode';
+  updateVolumeBar(290000);
   const demo = Array.from({length:60},(_,i) => 21+Math.sin(i/6)*2.5+i*.03+(Math.random()-.5)*.4);
   drawSpark(demo);
 }
@@ -380,8 +430,49 @@ function setRange(btn) {
   btn.classList.add('active');
 }
 
+/* ── News feed (Google News RSS, no API key needed) ── */
+async function fetchNews() {
+  const rssUrl = 'https://news.google.com/rss/search?q=SpaceX+SPCX&hl=en-US&gl=US&ceid=US:en';
+  try {
+    let xmlText;
+    for (const p of PROXIES) {
+      try {
+        const r = await fetchTimeout(p + encodeURIComponent(rssUrl));
+        const text = await r.text();
+        // allorigins wraps XML inside JSON { contents }
+        try {
+          const wrapped = JSON.parse(text);
+          xmlText = wrapped.contents || text;
+        } catch { xmlText = text; }
+        if (xmlText && xmlText.includes('<item>')) break;
+      } catch(e) { continue; }
+    }
+    if (!xmlText) throw new Error('No news data');
+
+    const doc = new DOMParser().parseFromString(xmlText, 'text/xml');
+    const items = Array.from(doc.querySelectorAll('item')).slice(0, 6);
+    if (!items.length) throw new Error('No items parsed');
+
+    $('newsList').innerHTML = items.map(item => {
+      const title = item.querySelector('title')?.textContent || 'Untitled';
+      const link  = item.querySelector('link')?.textContent || '#';
+      const pubDate = item.querySelector('pubDate')?.textContent;
+      const date = pubDate ? new Date(pubDate).toLocaleDateString(undefined,{month:'short',day:'numeric'}) : '';
+      const source = item.querySelector('source')?.textContent || '';
+      return `<a class="news-item" href="${link}" target="_blank" rel="noopener noreferrer">
+        <div class="news-title">${title.replace(/&amp;/g,'&')}</div>
+        <div class="news-meta">${source}${source && date ? ' · ' : ''}${date}</div>
+      </a>`;
+    }).join('');
+  } catch(e) {
+    console.warn('News fetch failed', e);
+    $('newsList').innerHTML = '<div class="news-loading">News unavailable right now. Check back later.</div>';
+  }
+}
+
 async function init() {
-  renderAnalysts();
+  updateCountdowns();
+  fetchNews();
   // safety net: if nothing has loaded within 10s, force demo data so the page is never stuck
   const safety = setTimeout(() => {
     if ($('ts').textContent === 'Connecting…') useDemoData();
@@ -390,10 +481,11 @@ async function init() {
   clearTimeout(safety);
   fetchSummary();
   setInterval(fetchQuote, 60000);
+  setInterval(fetchNews, 600000); // refresh news every 10 minutes
 }
 
 window.addEventListener('load', init);
 window.addEventListener('resize', () => sparkData.length && drawSpark(sparkData));
 </script>
 </body>
-</html>
+                                                                                                                              </html>
