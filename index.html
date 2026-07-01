@@ -30,7 +30,11 @@
     .live-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);margin-right:6px;animation:pulse 1.4s ease-in-out infinite;}
     @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
     .ts{color:var(--muted);font-size:12px;}
-    .ad-wrap{width:100%;margin-bottom:24px;}
+    .ad-wrap{width:100%;margin-bottom:0;}
+    .ad-wrap:empty{display:none;}
+    /* collapse AdSense slots that haven't filled yet */
+    .ad-wrap ins[data-ad-status="unfilled"]{display:none!important;}
+    .ad-wrap:has(ins[data-ad-status="unfilled"]){margin:0;padding:0;}
     .hero{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;}
     @media(max-width:640px){.hero{grid-template-columns:1fr;}}
     .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px 22px;}
@@ -107,17 +111,6 @@
     <div class="ts"><span class="live-dot"></span><span id="ts">Connecting…</span></div>
   </nav>
 
-  <!-- Ad 1 — top of page -->
-  <div class="ad-wrap">
-    <ins class="adsbygoogle"
-         style="display:block"
-         data-ad-client="ca-pub-5603390947666054"
-         data-ad-slot="9275938959"
-         data-ad-format="auto"
-         data-full-width-responsive="true"></ins>
-    <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
-  </div>
-
   <div class="hero">
     <div class="card">
       <div class="card-label">SPCX — Last Price</div>
@@ -133,6 +126,20 @@
         <div><div class="stat-key">52W Low</div><div class="stat-val" id="l52">—</div></div>
       </div>
     </div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-hdr">
+
+  <!-- Ad 1 — after price cards, before chart -->
+  <div class="ad-wrap">
+    <ins class="adsbygoogle"
+         style="display:block;min-height:0"
+         data-ad-client="ca-pub-5603390947666054"
+         data-ad-slot="9275938959"
+         data-ad-format="auto"
+         data-full-width-responsive="true"></ins>
+    <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
   </div>
 
   <div class="chart-card">
@@ -332,14 +339,27 @@ async function fetchQuote() {
     $('bidAsk').textContent   = (m.bid != null && m.ask != null) ? `${fmt(m.bid)} / ${fmt(m.ask)}` : '—';
     $('ts').textContent     = 'Updated ' + new Date().toLocaleTimeString();
     drawSpark(closes);
+
+    // try to get avg volume from chart meta first (no extra API call needed)
+    const avgFromMeta = m.averageVolume || m.averageDailyVolume10Day || m.averageDailyVolume3Month;
+    if (avgFromMeta) {
+      updateVolumeBar(avgFromMeta, m.regularMarketVolume);
+    } else {
+      // chart meta didn't have it — fetchSummary will call updateVolumeBar when it resolves
+      fetchSummary(m.regularMarketVolume);
+    }
   } catch(e) { console.warn(e); useDemoData(); }
 }
 
-async function fetchSummary() {
+const YFS2 = `https://query2.finance.yahoo.com/v8/finance/chart/${TICKER}?interval=1d&range=1mo`;
+
+async function fetchSummary(todayVol) {
+  // try quoteSummary endpoint first
   try {
     const d = await fetchViaProxy(YFS);
     const sd = d.quoteSummary.result[0];
-    const avgVolRaw = sd.summaryDetail?.averageVolume?.raw;
+    const avgVolRaw = sd.summaryDetail?.averageVolume?.raw
+                   || sd.summaryDetail?.averageVolume10days?.raw;
     $('aum').textContent    = fmtB(sd.price?.marketCap?.raw);
     $('mktCap').textContent = fmtB(sd.price?.marketCap?.raw);
     $('shares').textContent = sd.defaultKeyStatistics?.sharesOutstanding?.raw != null
@@ -347,25 +367,48 @@ async function fetchSummary() {
     $('avgVol').textContent = fmtV(avgVolRaw);
     $('pe').textContent     = sd.defaultKeyStatistics?.trailingPE?.raw != null
                               ? (+sd.defaultKeyStatistics.trailingPE.raw).toFixed(1) : 'N/A';
-    updateVolumeBar(avgVolRaw);
-  } catch(e) {}
+    if (avgVolRaw) { updateVolumeBar(avgVolRaw, todayVol); return; }
+  } catch(e) { console.warn('fetchSummary endpoint 1 failed', e); }
+
+  // fallback: compute avg from last 30 days of daily closes
+  try {
+    const d2 = await fetchViaProxy(YFS2);
+    const vols = d2.chart.result[0].indicators.quote[0].volume.filter(Boolean);
+    if (vols.length) {
+      const avg = vols.reduce((a,b) => a+b, 0) / vols.length;
+      $('avgVol').textContent = fmtV(avg);
+      updateVolumeBar(avg, todayVol);
+      return;
+    }
+  } catch(e) { console.warn('fetchSummary endpoint 2 failed', e); }
+
+  // last resort: use well-known SPCX 30-day average (~290K shares/day)
+  const KNOWN_AVG = 290000;
+  $('avgVol').textContent = fmtV(KNOWN_AVG) + ' (est.)';
+  updateVolumeBar(KNOWN_AVG, todayVol);
 }
 
 /* ── Volume vs average bar ── */
-function updateVolumeBar(avgVolRaw) {
-  const todayText = $('volume').textContent;
-  if (!avgVolRaw || todayText === '—') return;
-  // parse "312.4K" / "1.2M" style back to a number
-  const parseShort = s => {
-    const n = parseFloat(s);
-    if (s.includes('M')) return n * 1e6;
-    if (s.includes('K')) return n * 1e3;
-    return n;
-  };
-  const today = parseShort(todayText);
-  const pct = Math.min((today / avgVolRaw) * 100, 200); // cap visual at 200%
+function updateVolumeBar(avgVolRaw, todayRaw) {
+  // todayRaw can be a raw number from the API or undefined (fall back to DOM)
+  let today = todayRaw;
+  if (!today) {
+    const todayText = $('volume').textContent;
+    if (todayText === '—') today = 0;
+    else {
+      const n = parseFloat(todayText);
+      today = todayText.includes('M') ? n*1e6 : todayText.includes('K') ? n*1e3 : n;
+    }
+  }
+  if (!avgVolRaw) return;
+  const pct = (today / avgVolRaw) * 100;
   $('volBarFill').style.width = Math.min(pct, 100) + '%';
-  $('volToday').textContent = todayText;
+  $('volBarFill').style.background = pct >= 150
+    ? 'linear-gradient(90deg,var(--accent),var(--red))'
+    : pct >= 100
+    ? 'linear-gradient(90deg,var(--accent),var(--green))'
+    : 'linear-gradient(90deg,#1e2535,var(--accent))';
+  $('volToday').textContent = fmtV(today);
   $('volAvg').textContent   = fmtV(avgVolRaw);
   $('volPct').textContent   = pct.toFixed(0) + '% of avg';
   $('volPct').style.color   = pct >= 100 ? 'var(--green)' : 'var(--accent)';
@@ -398,7 +441,7 @@ function useDemoData() {
   $('avgVol').textContent = '290K';   $('beta').textContent   = '1.42';
   $('pe').textContent     = 'N/A';
   $('ts').textContent     = 'Demo mode';
-  updateVolumeBar(290000);
+  updateVolumeBar(290000, 312400);
   const demo = Array.from({length:60},(_,i) => 21+Math.sin(i/6)*2.5+i*.03+(Math.random()-.5)*.4);
   drawSpark(demo);
 }
@@ -473,19 +516,26 @@ async function fetchNews() {
 async function init() {
   updateCountdowns();
   fetchNews();
-  // safety net: if nothing has loaded within 10s, force demo data so the page is never stuck
   const safety = setTimeout(() => {
     if ($('ts').textContent === 'Connecting…') useDemoData();
   }, 10000);
   await fetchQuote();
   clearTimeout(safety);
-  fetchSummary();
   setInterval(fetchQuote, 60000);
-  setInterval(fetchNews, 600000); // refresh news every 10 minutes
+  setInterval(fetchNews, 600000);
 }
 
 window.addEventListener('load', init);
 window.addEventListener('resize', () => sparkData.length && drawSpark(sparkData));
+
+// collapse ad wrappers whose ins slot is unfilled (avoids blank white/black space)
+setTimeout(() => {
+  document.querySelectorAll('.ad-wrap ins.adsbygoogle').forEach(ins => {
+    if (ins.getAttribute('data-ad-status') === 'unfilled' || ins.offsetHeight === 0) {
+      ins.closest('.ad-wrap').style.cssText = 'margin:0;padding:0;height:0;overflow:hidden;';
+    }
+  });
+}, 3000);
 </script>
 </body>
-                                                                                                                              </html>
+  </html>
